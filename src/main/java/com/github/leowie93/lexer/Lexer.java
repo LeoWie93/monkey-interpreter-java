@@ -5,8 +5,8 @@ import com.github.leowie93.token.TokenType;
 
 public class Lexer {
     private final String input;
-    private int position;
-    private int readPosition;
+    private int currCharIndex;
+    private int nextCharIndex;
     private char ch;
 
     public Lexer(String input) {
@@ -56,7 +56,7 @@ public class Lexer {
                     String literal = this.readDigit();
                     return new Token(TokenType.INT, literal);
                 } else {
-                    System.out.println("ILLEAGAL");
+                    System.out.println("ILLEGAL");
                     return new Token(TokenType.ILLEGAL, this.ch);
                 }
             }
@@ -68,21 +68,21 @@ public class Lexer {
 
 
     String readDigit() {
-        int startPos = this.position;
+        int startPos = this.currCharIndex;
         while (isDigit(this.ch)) {
             this.readChar();
         }
 
-        return this.input.substring(startPos, this.position);
+        return this.input.substring(startPos, this.currCharIndex);
     }
 
     String readIdentifier() {
-        int startPos = this.position;
+        int startPos = this.currCharIndex;
         while (isLetter(this.ch)) {
             this.readChar();
         }
 
-        return this.input.substring(startPos, this.position);
+        return this.input.substring(startPos, this.currCharIndex);
     }
 
     private boolean isDigit(char ch) {
@@ -100,21 +100,21 @@ public class Lexer {
     }
 
     public char peakChar() {
-        if (this.readPosition >= this.input.length()) {
+        if (this.nextCharIndex >= this.input.length()) {
             return 0;
         }
 
-        return this.input.charAt(this.readPosition);
+        return this.input.charAt(this.nextCharIndex);
     }
 
     public void readChar() {
-        if (this.readPosition >= this.input.length()) {
+        if (this.nextCharIndex >= this.input.length()) {
             this.ch = 0;
         } else {
-            this.ch = this.input.charAt(this.readPosition);
+            this.ch = this.input.charAt(this.nextCharIndex);
         }
 
-        this.position = this.readPosition;
-        this.readPosition++;
+        this.currCharIndex = this.nextCharIndex;
+        this.nextCharIndex++;
     }
 }

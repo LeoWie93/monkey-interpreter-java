@@ -15,6 +15,7 @@ public class Repl {
             String input = sc.nextLine();
 
             if (input.equals("exit")) {
+                System.out.println("Quitting");
                 return;
             }
 
