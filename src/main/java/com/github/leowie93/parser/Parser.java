@@ -2,10 +2,7 @@ package com.github.leowie93.parser;
 
 import com.github.leowie93.ast.Expression.*;
 import com.github.leowie93.ast.Program;
-import com.github.leowie93.ast.Statement.ExpressionStatement;
-import com.github.leowie93.ast.Statement.LetStatement;
-import com.github.leowie93.ast.Statement.ReturnStatement;
-import com.github.leowie93.ast.Statement.Statement;
+import com.github.leowie93.ast.Statement.*;
 import com.github.leowie93.lexer.Lexer;
 import com.github.leowie93.token.Token;
 import com.github.leowie93.token.TokenType;
@@ -35,7 +32,8 @@ public class Parser {
             TokenType.ASTERISK, ParserPrecedence.PRODUCT,
             TokenType.SLASH, ParserPrecedence.PRODUCT,
             TokenType.EQUAL, ParserPrecedence.EQUALS,
-            TokenType.NEQUAL, ParserPrecedence.EQUALS
+            TokenType.NEQUAL, ParserPrecedence.EQUALS,
+            TokenType.LPAREN, ParserPrecedence.CALL
     ));
 
     public Parser(Lexer lexer) {
@@ -48,6 +46,8 @@ public class Parser {
         this.registerPrefixFn(TokenType.TRUE, this::parseBooleanLiteral);
         this.registerPrefixFn(TokenType.FALSE, this::parseBooleanLiteral);
         this.registerPrefixFn(TokenType.LPAREN, this::parseGroupedExpression);
+        this.registerPrefixFn(TokenType.IF, this::parseIfExpression);
+        this.registerPrefixFn(TokenType.FUNCTION, this::parseFunctionExpression);
 
         this.registerInfixFn(TokenType.PLUS, this::parseInfixExpression);
         this.registerInfixFn(TokenType.MINUS, this::parseInfixExpression);
@@ -57,6 +57,7 @@ public class Parser {
         this.registerInfixFn(TokenType.NEQUAL, this::parseInfixExpression);
         this.registerInfixFn(TokenType.LT, this::parseInfixExpression);
         this.registerInfixFn(TokenType.GT, this::parseInfixExpression);
+        this.registerInfixFn(TokenType.LPAREN, this::parseCallExpression);
 
         //Position parser at the start
         this.advanceParser();
@@ -87,21 +88,21 @@ public class Parser {
                 statements.add(statement);
             }
 
-            this.advanceParser();
+            this.advanceParser(); //we should currently be on top of an ";" or at the end
         }
 
         return new Program(statements);
     }
 
-    private Expression parseIdentifier() {
+    private IdentifierExpression parseIdentifier() {
         return new IdentifierExpression(this.currToken, this.currToken.getLiteral());
     }
 
-    private Expression parseBooleanLiteral() {
+    private BooleanLiteralExpression parseBooleanLiteral() {
         return new BooleanLiteralExpression(this.currToken, this.currTokenIs(TokenType.TRUE));
     }
 
-    private Expression parseIntegerLiteral() {
+    private IntegerLiteralExpression parseIntegerLiteral() {
         try {
             int value = Integer.parseInt(this.currToken.getLiteral());
             return new IntegerLiteralExpression(this.currToken, value);
@@ -195,11 +196,130 @@ public class Parser {
 
         var exp = this.parseExpression(ParserPrecedence.LOWEST);
 
-        if(!this.expectPeek(TokenType.RPAREN)){
+        if (!this.expectPeek(TokenType.RPAREN)) {
             return null;
         }
 
         return exp;
+    }
+
+    private IfExpression parseIfExpression() {
+        IfExpression ifExpression = new IfExpression(this.currToken);
+
+        if (!this.expectPeek(TokenType.LPAREN)) {
+            return null;
+        }
+        this.advanceParser();
+
+        ifExpression.condition = this.parseExpression(ParserPrecedence.LOWEST);
+
+        if (!this.expectPeek(TokenType.RPAREN)) {
+            return null;
+        }
+
+        if (!this.expectPeek(TokenType.LBRACE)) {
+            return null;
+        }
+
+        //Stay on the LBRACE while calling parseBlockStatement. It is part of the block.
+        ifExpression.consequence = this.parseBlockStatement();
+
+        if (this.peekTokenIs(TokenType.ELSE)) {
+            this.advanceParser();
+            if (!this.expectPeek(TokenType.LBRACE)) {
+                return null;
+            }
+            ifExpression.alternative = this.parseBlockStatement();
+        }
+
+        return ifExpression;
+    }
+
+    private FunctionLiteralExpression parseFunctionExpression() {
+        FunctionLiteralExpression functionExpression = new FunctionLiteralExpression(this.currToken);
+
+        if (!this.expectPeek(TokenType.LPAREN)) {
+            return null;
+        }
+
+        functionExpression.parameters = this.parseFunctionParameters();
+
+        if (!this.expectPeek(TokenType.LBRACE)) {
+            return null;
+        }
+
+        functionExpression.body = this.parseBlockStatement();
+        return functionExpression;
+    }
+
+    private List<IdentifierExpression> parseFunctionParameters() {
+        List<IdentifierExpression> parameters = new ArrayList<>();
+        if (this.peekTokenIs(TokenType.RPAREN)) {
+            this.advanceParser();
+            return parameters;
+        }
+
+        this.advanceParser();
+
+        parameters.add(this.parseIdentifier());
+
+        while (this.peekTokenIs(TokenType.COMMA)) {
+            this.advanceParser();
+            this.advanceParser();
+            parameters.add(this.parseIdentifier());
+        }
+
+        if (!this.expectPeek(TokenType.RPAREN)) {
+            return null;
+        }
+
+        return parameters;
+    }
+
+    private CallExpression parseCallExpression(Expression function) {
+        CallExpression callExpression = new CallExpression(this.currToken, function);
+        callExpression.arguments = this.parseCallArguments();
+        return callExpression;
+    }
+
+    private List<Expression> parseCallArguments() {
+        List<Expression> arguments = new ArrayList<>();
+
+        if (this.peekTokenIs(TokenType.RPAREN)) {
+            this.advanceParser();
+            return arguments;
+        }
+
+        this.advanceParser();
+
+        arguments.add(this.parseExpression(ParserPrecedence.LOWEST));
+
+        while (this.peekTokenIs(TokenType.COMMA)) {
+            this.advanceParser();
+            this.advanceParser();
+            arguments.add(this.parseExpression(ParserPrecedence.LOWEST));
+        }
+
+        if (!this.expectPeek(TokenType.RPAREN)) {
+            return null;
+        }
+
+        return arguments;
+    }
+
+    private BlockStatement parseBlockStatement() {
+        BlockStatement blockStatement = new BlockStatement(this.currToken);
+        this.advanceParser();
+
+        while (!this.currTokenIs(TokenType.RBRACE) && !this.currTokenIs(TokenType.EOF)) {
+            Statement statement = this.parseStatement();
+            if (statement != null) {
+                blockStatement.statementList.add(statement);
+            }
+            this.advanceParser();
+        }
+
+        return blockStatement;
     }
 
     private Statement parseReturnStatement() {
@@ -236,7 +356,6 @@ public class Parser {
 
         return statement;
     }
-
 
     /**
      * @param tokenType The token to expect and advance the parser if true

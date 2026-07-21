@@ -37,7 +37,8 @@ public class ParserTest {
                 new PrecedenceTest("3 > 5 == false", "((3 > 5) == false)"),
                 new PrecedenceTest("3 < 5 == true", "((3 < 5) == true)"),
                 new PrecedenceTest("a * (b + c)", "(a * (b + c))"),
-                new PrecedenceTest("(b + c) * a", "((b + c) * a)")
+                new PrecedenceTest("(b + c) * a", "((b + c) * a)"),
+                new PrecedenceTest("a + add(b * c) + d", "((a + add((b * c))) + d)")
         };
 
         for (PrecedenceTest precedenceTest : tests) {
@@ -75,7 +76,7 @@ public class ParserTest {
             assertEquals(1, program.getStatements().size());
 
             ExpressionStatement expression = (ExpressionStatement) program.getStatements().getFirst();
-            testInfixExpression(expression.getExpression(), infixTest.getLeftValue(), infixTest.getOperator(), infixTest.getRightValue());
+            testInfixExpression(expression.expression, infixTest.getLeftValue(), infixTest.getOperator(), infixTest.getRightValue());
         }
     }
 
@@ -96,7 +97,7 @@ public class ParserTest {
             assertEquals(1, program.getStatements().size());
 
             ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
-            PrefixExpression prefixExpression = (PrefixExpression) statement.getExpression();
+            PrefixExpression prefixExpression = (PrefixExpression) statement.expression;
 
             assertEquals(testData.getOperator(), prefixExpression.getOperator());
 
@@ -128,7 +129,7 @@ public class ParserTest {
             assertEquals(1, program.getStatements().size());
 
             ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
-            PrefixExpression prefixExpression = (PrefixExpression) statement.getExpression();
+            PrefixExpression prefixExpression = (PrefixExpression) statement.expression;
 
             assertEquals(testData.getOperator(), prefixExpression.getOperator());
             testLiteralExpression(prefixExpression.getRight(), testData.getValue());
@@ -150,7 +151,7 @@ public class ParserTest {
         assertEquals(1, program.getStatements().size());
 
         ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
-        testIntegerLiteral(statement.getExpression(), 5);
+        testIntegerLiteral(statement.expression, 5);
     }
 
     @Test
@@ -168,7 +169,7 @@ public class ParserTest {
         assertEquals(1, program.getStatements().size());
 
         ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
-        testIdentifier(statement.getExpression(), "foobar");
+        testIdentifier(statement.expression, "foobar");
     }
 
     @Test
@@ -196,7 +197,7 @@ public class ParserTest {
     }
 
     @Test
-    public void testLetStatements() {
+    public void testParseLetStatement() {
         String input = """
                 let x = 5;
                 let y = 10;
@@ -221,6 +222,131 @@ public class ParserTest {
             this.testLetStatement(statement, tests[i].getIdent());
             //TODO test value part
         }
+    }
+
+    @Test
+    public void testParseIfExpression() {
+        String input = """
+                if (x < y) {x}
+                """;
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        this.checkParseErrors(parser);
+
+        assertEquals(1, program.getStatements().size());
+
+        ExpressionStatement expressionStatement = (ExpressionStatement) program.getStatements().getFirst();
+        IfExpression ifExpression = (IfExpression) expressionStatement.expression;
+
+        assertEquals(TokenType.IF, ifExpression.token.getTokenType());
+        testInfixExpression(ifExpression.condition, "x", "<", "y");
+
+        ExpressionStatement consequence = (ExpressionStatement) ifExpression.consequence.statementList.getFirst();
+        testIdentifier(consequence.expression, "x");
+
+        assertNull(ifExpression.alternative);
+    }
+
+    @Test
+    public void testParseIfElseExpression() {
+        String input = """
+                if (x < y) {x} else {y}
+                """;
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        this.checkParseErrors(parser);
+
+        assertEquals(1, program.getStatements().size());
+
+        ExpressionStatement expressionStatement = (ExpressionStatement) program.getStatements().getFirst();
+        IfExpression ifExpression = (IfExpression) expressionStatement.expression;
+
+        assertEquals(TokenType.IF, ifExpression.token.getTokenType());
+        testInfixExpression(ifExpression.condition, "x", "<", "y");
+
+        ExpressionStatement consequence = (ExpressionStatement) ifExpression.consequence.statementList.getFirst();
+        testIdentifier(consequence.expression, "x");
+
+        ExpressionStatement alternative = (ExpressionStatement) ifExpression.alternative.statementList.getFirst();
+        testIdentifier(alternative.expression, "y");
+    }
+
+    @Test
+    public void testParseFunctionExpression() {
+        String input = """
+                fn(x, y) { x + y; }
+                """;
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        this.checkParseErrors(parser);
+
+        assertEquals(1, program.getStatements().size());
+
+        ExpressionStatement expressionStatement = (ExpressionStatement) program.getStatements().getFirst();
+        FunctionLiteralExpression functionExpression = (FunctionLiteralExpression) expressionStatement.expression;
+
+        assertEquals("fn", functionExpression.getTokenLiteral());
+
+        assertEquals(2, functionExpression.parameters.size());
+        testLiteralExpression(functionExpression.parameters.get(0), "x");
+        testLiteralExpression(functionExpression.parameters.get(1), "y");
+
+        assertEquals(1, functionExpression.body.statementList.size());
+        ExpressionStatement firstBodyStatement = (ExpressionStatement) functionExpression.body.statementList.get(0);
+        testInfixExpression(firstBodyStatement.expression, "x", "+", "y");
+    }
+
+    @Test
+    public void testParseFunctionParameters() {
+        List<FunctionParametersTest> tests = List.of(
+                new FunctionParametersTest("fn() {}", List.of()),
+                new FunctionParametersTest("fn(x) {}", List.of("x")),
+                new FunctionParametersTest("fn(x,y,z) {}", List.of("x", "y", "z"))
+        );
+
+        for (FunctionParametersTest test : tests) {
+            Lexer lexer = new Lexer(test.input);
+            Parser parser = new Parser(lexer);
+            Program program = parser.parseProgram();
+
+            ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
+            FunctionLiteralExpression functionExpression = (FunctionLiteralExpression) statement.expression;
+
+            int expectedParamsCount = test.expectedParams.size();
+            assertEquals(expectedParamsCount, functionExpression.parameters.size());
+
+            for (int i = 0; i < expectedParamsCount; i++) {
+                testIdentifier(functionExpression.parameters.get(i), test.expectedParams.get(i));
+            }
+        }
+    }
+
+    @Test
+    public void testParseCallExpression() {
+        String input = """
+                add(1, 2 * 3, 4 + 5);
+                """;
+
+        Lexer lexer = new Lexer(input);
+        Parser parser = new Parser(lexer);
+        Program program = parser.parseProgram();
+        this.checkParseErrors(parser);
+
+        ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
+        CallExpression callExpression = (CallExpression) statement.expression;
+
+        testIdentifier(callExpression.function, "add");
+
+        assertEquals(3, callExpression.arguments.size());
+        testLiteralExpression(callExpression.arguments.get(0), 1);
+        testInfixExpression(callExpression.arguments.get(1), 2, "*", 3);
+        testInfixExpression(callExpression.arguments.get(2), 4, "+", 5);
     }
 
     private void testLetStatement(Statement statement, String identifierName) {
@@ -289,7 +415,6 @@ public class ParserTest {
         fail();
     }
 }
-
 
 //TODO refactor/consolidate these "testcases". Maybe they could be simpler or more generic. InputOuputTestHelper or smth
 
@@ -367,5 +492,15 @@ class PrecedenceTest {
     PrecedenceTest(String input, String expected) {
         this.input = input;
         this.expected = expected;
+    }
+}
+
+class FunctionParametersTest {
+    String input;
+    List<String> expectedParams;
+
+    FunctionParametersTest(String input, List<String> expectedParams) {
+        this.input = input;
+        this.expectedParams = expectedParams;
     }
 }

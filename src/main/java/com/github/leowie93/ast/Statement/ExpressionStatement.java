@@ -7,7 +7,7 @@ import com.github.leowie93.token.Token;
 public class ExpressionStatement implements Statement {
 
     private final Token token;
-    private Expression expression;
+    public Expression expression;
 
     public ExpressionStatement(Token token, Expression expression) {
         this.token = token; // the first token of the expression
@@ -21,8 +21,8 @@ public class ExpressionStatement implements Statement {
     public String nodeToString() {
         String output = "";
 
-        if (this.getExpression() != null) {
-            output += this.getExpression().nodeToString();
+        if (this.expression != null) {
+            output += this.expression.nodeToString();
         }
 
         return output;
@@ -40,10 +40,6 @@ public class ExpressionStatement implements Statement {
 
     public Token getToken() {
         return token;
-    }
-
-    public Expression getExpression() {
-        return this.expression;
     }
 
     public void setExpression(Expression expression) {
