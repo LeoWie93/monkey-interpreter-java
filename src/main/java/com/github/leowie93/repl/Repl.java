@@ -1,6 +1,8 @@
 package com.github.leowie93.repl;
 
+import com.github.leowie93.ast.Program;
 import com.github.leowie93.lexer.Lexer;
+import com.github.leowie93.parser.Parser;
 import com.github.leowie93.token.Token;
 import com.github.leowie93.token.TokenType;
 
@@ -20,12 +22,15 @@ public class Repl {
             }
 
             Lexer lexer = new Lexer(input);
+            Parser parser = new Parser(lexer);
+            Program program = parser.parseProgram();
 
-            Token token = lexer.nextToken();
-            while (token.getTokenType() != TokenType.EOF) {
-                System.out.println(token.getTokenType() + " " + token.getLiteral());
-                token = lexer.nextToken();
+            if (!parser.getErrors().isEmpty()) {
+                parser.getErrors().forEach(System.out::println);
+                continue;
             }
+
+            System.out.println(program.nodeToString());
         }
     }
 }

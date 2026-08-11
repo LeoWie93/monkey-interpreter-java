@@ -6,8 +6,8 @@ import com.github.leowie93.token.Token;
 
 public class ReturnStatement implements Statement {
 
-    private final Token token;
-    private Expression returnValue;
+    public final Token token;
+    public Expression returnValue;
 
     public ReturnStatement(Token token, Expression returnValue) {
         this.token = token;

@@ -26,7 +26,7 @@ public class IfExpression implements Expression {
         stringBuilder.append(this.consequence.nodeToString());
 
         if (this.alternative != null) {
-            stringBuilder.append("else ");
+            stringBuilder.append(" else ");
             stringBuilder.append(this.alternative.nodeToString());
         }
 

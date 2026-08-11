@@ -64,7 +64,6 @@ public class Parser {
         this.advanceParser();
     }
 
-
     public void advanceParser() {
         this.currToken = this.nextToken;
         this.nextToken = this.lexer.nextToken();
@@ -203,6 +202,7 @@ public class Parser {
         return exp;
     }
 
+    //If statements only allow a single expression per branch => produces a value
     private IfExpression parseIfExpression() {
         IfExpression ifExpression = new IfExpression(this.currToken);
 
@@ -264,8 +264,8 @@ public class Parser {
         parameters.add(this.parseIdentifier());
 
         while (this.peekTokenIs(TokenType.COMMA)) {
-            this.advanceParser();
-            this.advanceParser();
+            this.advanceParser(); // onto comman
+            this.advanceParser(); // onto next token
             parameters.add(this.parseIdentifier());
         }
 
@@ -295,8 +295,8 @@ public class Parser {
         arguments.add(this.parseExpression(ParserPrecedence.LOWEST));
 
         while (this.peekTokenIs(TokenType.COMMA)) {
-            this.advanceParser();
-            this.advanceParser();
+            this.advanceParser(); // onto comma
+            this.advanceParser(); // onto next token
             arguments.add(this.parseExpression(ParserPrecedence.LOWEST));
         }
 
@@ -327,10 +327,10 @@ public class Parser {
 
         this.advanceParser();
 
-        // TODO implement expression handling
-        // skip for now
-        while (this.currToken.getTokenType() != TokenType.SEMICOLON) {
-            this.advanceParser();
+        returnStatement.setReturnValue(this.parseExpression(ParserPrecedence.LOWEST));
+
+        if(!expectPeek(TokenType.SEMICOLON)){
+            return null;
         }
 
         return returnStatement;
@@ -349,9 +349,12 @@ public class Parser {
             return null;
         }
 
-        //Skip expression for now The token to expect and advance the parser if true
-        while (this.currToken.getTokenType() != TokenType.SEMICOLON) {
-            this.advanceParser();
+        this.advanceParser();
+
+        statement.setValue(this.parseExpression(ParserPrecedence.LOWEST));
+
+        if (!this.expectPeek(TokenType.SEMICOLON)) {
+            return null;
         }
 
         return statement;
@@ -379,7 +382,7 @@ public class Parser {
     }
 
     private void peekError(TokenType tokenType) {
-        this.setError(String.format("Expected Token of type %s but found %s", tokenType.value(), this.nextToken.getTokenType().value()));
+        this.setError(String.format("Expected Token of type %s, got %s instead", tokenType.value(), this.nextToken.getTokenType().value()));
     }
 
     public List<String> getErrors() {

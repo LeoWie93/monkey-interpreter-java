@@ -38,17 +38,19 @@ public class ParserTest {
                 new PrecedenceTest("3 < 5 == true", "((3 < 5) == true)"),
                 new PrecedenceTest("a * (b + c)", "(a * (b + c))"),
                 new PrecedenceTest("(b + c) * a", "((b + c) * a)"),
-                new PrecedenceTest("a + add(b * c) + d", "((a + add((b * c))) + d)")
+                new PrecedenceTest("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+                new PrecedenceTest("add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))", "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"),
+                new PrecedenceTest("add(a + b + c * d / f + g)", "add((((a + b) + ((c * d) / f)) + g))")
         };
 
         for (PrecedenceTest precedenceTest : tests) {
-            Lexer l = new Lexer(precedenceTest.input);
+            Lexer l = new Lexer(precedenceTest.input());
             Parser p = new Parser(l);
             Program program = p.parseProgram();
             checkParseErrors(p);
 
             String actual = program.nodeToString();
-            assertEquals(precedenceTest.expected, actual, String.format("Expected=%s, got=%s", precedenceTest.expected, actual));
+            assertEquals(precedenceTest.expected(), actual, String.format("Expected=%s, got=%s", precedenceTest.expected(), actual));
         }
     }
 
@@ -67,7 +69,7 @@ public class ParserTest {
         );
 
         for (var infixTest : infixTests) {
-            Lexer l = new Lexer(infixTest.getInput());
+            Lexer l = new Lexer(infixTest.input());
             Parser p = new Parser(l);
             Program program = p.parseProgram();
 
@@ -76,7 +78,7 @@ public class ParserTest {
             assertEquals(1, program.getStatements().size());
 
             ExpressionStatement expression = (ExpressionStatement) program.getStatements().getFirst();
-            testInfixExpression(expression.expression, infixTest.getLeftValue(), infixTest.getOperator(), infixTest.getRightValue());
+            testInfixExpression(expression.expression, infixTest.leftValue(), infixTest.operator(), infixTest.rightValue());
         }
     }
 
@@ -174,25 +176,27 @@ public class ParserTest {
 
     @Test
     public void testReturnStatements() {
-        String input = """
-                return 5;
-                return 10;
-                return      838383;
-                """;
+        List<ReturnStatementTest<?>> tests = List.of(
+                new ReturnStatementTest<Integer>("return 5;", 5),
+                new ReturnStatementTest<Integer>("return 10;", 10),
+                new ReturnStatementTest<Integer>("return 838383;", 838383),
+                new ReturnStatementTest<String>("return world;", "world")
+        );
 
-        Lexer lexer = new Lexer(input);
-        Parser parser = new Parser(lexer);
-        Program program = parser.parseProgram();
-        this.checkParseErrors(parser);
+        for (ReturnStatementTest<?> test : tests) {
+            Lexer lexer = new Lexer(test.input());
+            Parser parser = new Parser(lexer);
+            Program program = parser.parseProgram();
+            this.checkParseErrors(parser);
 
-        assertEquals(3, program.getStatements().size());
+            assertEquals(1, program.getStatements().size());
 
-        for (Statement statement : program.getStatements()) {
+            Statement statement = program.getStatements().getFirst();
             assertInstanceOf(ReturnStatement.class, statement);
             ReturnStatement returnStatement = (ReturnStatement) statement;
 
             assertEquals(TokenType.RETURN, returnStatement.getToken().getTokenType());
-            //TODO also test the return expression, if their is any?
+            this.testLiteralExpression(returnStatement.getReturnValue(), test.expectedValue());
         }
     }
 
@@ -202,6 +206,7 @@ public class ParserTest {
                 let x = 5;
                 let y = 10;
                 let foobar  =   838383;
+                let another = foobar;
                 """;
 
         Lexer lexer = new Lexer(input);
@@ -209,18 +214,20 @@ public class ParserTest {
         Program program = parser.parseProgram();
         this.checkParseErrors(parser);
 
-        assertEquals(3, program.getStatements().size());
+        assertEquals(4, program.getStatements().size());
 
-        ExpectedStatement[] tests = {
-                new ExpectedStatement("x"),
-                new ExpectedStatement("y"),
-                new ExpectedStatement("foobar")
-        };
+        List<LetStatementTest<?>> tests = List.of(
+                new LetStatementTest<Integer>("x", 5),
+                new LetStatementTest<Integer>("y", 10),
+                new LetStatementTest<Integer>("foobar", 838383),
+                new LetStatementTest<String>("another", "foobar")
+        );
 
-        for (int i = 0; i < tests.length; i++) {
+        for (int i = 0; i < tests.size(); i++) {
             Statement statement = program.getStatements().get(i);
-            this.testLetStatement(statement, tests[i].getIdent());
-            //TODO test value part
+            LetStatement letStatement = (LetStatement) statement;
+            this.testLetStatement(letStatement, tests.get(i).expectedIdentifier());
+            this.testLiteralExpression(letStatement.getValue(), tests.get(i).expectedValue());
         }
     }
 
@@ -311,18 +318,18 @@ public class ParserTest {
         );
 
         for (FunctionParametersTest test : tests) {
-            Lexer lexer = new Lexer(test.input);
+            Lexer lexer = new Lexer(test.input());
             Parser parser = new Parser(lexer);
             Program program = parser.parseProgram();
 
             ExpressionStatement statement = (ExpressionStatement) program.getStatements().getFirst();
             FunctionLiteralExpression functionExpression = (FunctionLiteralExpression) statement.expression;
 
-            int expectedParamsCount = test.expectedParams.size();
+            int expectedParamsCount = test.expectedParams().size();
             assertEquals(expectedParamsCount, functionExpression.parameters.size());
 
             for (int i = 0; i < expectedParamsCount; i++) {
-                testIdentifier(functionExpression.parameters.get(i), test.expectedParams.get(i));
+                testIdentifier(functionExpression.parameters.get(i), test.expectedParams().get(i));
             }
         }
     }
@@ -330,7 +337,7 @@ public class ParserTest {
     @Test
     public void testParseCallExpression() {
         String input = """
-                add(1, 2 * 3, 4 + 5);
+                add(1, 2 * 3, 4 + 5,b);
                 """;
 
         Lexer lexer = new Lexer(input);
@@ -343,10 +350,11 @@ public class ParserTest {
 
         testIdentifier(callExpression.function, "add");
 
-        assertEquals(3, callExpression.arguments.size());
+        assertEquals(4, callExpression.arguments.size());
         testLiteralExpression(callExpression.arguments.get(0), 1);
         testInfixExpression(callExpression.arguments.get(1), 2, "*", 3);
         testInfixExpression(callExpression.arguments.get(2), 4, "+", 5);
+        testIdentifier(callExpression.arguments.get(3), "b");
     }
 
     private void testLetStatement(Statement statement, String identifierName) {
@@ -381,6 +389,11 @@ public class ParserTest {
         assertEquals(String.valueOf(value), booleanLiteralExpression.getTokenLiteral());
     }
 
+    /**
+     *
+     * @param exp   the expression to evaluate
+     * @param value the type and value we expect to be the result of the evaluation
+     */
     private void testLiteralExpression(Expression exp, Object value) {
         switch (value) {
             case Integer i -> testIntegerLiteral(exp, i);
@@ -418,16 +431,10 @@ public class ParserTest {
 
 //TODO refactor/consolidate these "testcases". Maybe they could be simpler or more generic. InputOuputTestHelper or smth
 
-class ExpectedStatement {
-    private final String ident;
+record LetStatementTest<T>(String expectedIdentifier, T expectedValue) {
+}
 
-    ExpectedStatement(String ident) {
-        this.ident = ident;
-    }
-
-    public String getIdent() {
-        return this.ident;
-    }
+record ReturnStatementTest<T>(String input, T expectedValue) {
 }
 
 class PrefixExpressionTestData<T> {
@@ -454,53 +461,11 @@ class PrefixExpressionTestData<T> {
     }
 }
 
-class InfixTest<T> {
-    private String input;
-    private T leftValue;
-    private String operator;
-    private T rightValue;
-
-    public InfixTest(String input, T leftValue, String operator, T rightValue) {
-        this.input = input;
-        this.leftValue = leftValue;
-        this.operator = operator;
-        this.rightValue = rightValue;
-    }
-
-    public String getInput() {
-        return input;
-    }
-
-    public T getLeftValue() {
-        return leftValue;
-    }
-
-    public String getOperator() {
-        return operator;
-    }
-
-    public T getRightValue() {
-        return rightValue;
-    }
+record InfixTest<T>(String input, T leftValue, String operator, T rightValue) {
 }
 
-// Helper class to represent test cases
-class PrecedenceTest {
-    String input;
-    String expected;
-
-    PrecedenceTest(String input, String expected) {
-        this.input = input;
-        this.expected = expected;
-    }
+record PrecedenceTest(String input, String expected) {
 }
 
-class FunctionParametersTest {
-    String input;
-    List<String> expectedParams;
-
-    FunctionParametersTest(String input, List<String> expectedParams) {
-        this.input = input;
-        this.expectedParams = expectedParams;
-    }
+record FunctionParametersTest(String input, List<String> expectedParams) {
 }
