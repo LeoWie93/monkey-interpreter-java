@@ -87,6 +87,7 @@ public class Parser {
                 statements.add(statement);
             }
 
+            //this is the place to check for line ending syntax, if this language should have any
             this.advanceParser(); //we should currently be on top of an ";" or at the end
         }
 
@@ -111,7 +112,6 @@ public class Parser {
         }
     }
 
-    // Is a function a prefix or does it need special treatment? (it IS an expression so it should be handled like one and not here?)
     private Statement parseStatement() {
         return switch (this.currToken.getTokenType()) {
             case TokenType.LET -> this.parseLetStatement();
@@ -166,7 +166,7 @@ public class Parser {
         Token token = this.currToken;
         String operator = this.currToken.getLiteral();
 
-        this.advanceParser();
+        this.advanceParser(); // move off prefix operator
 
         return new PrefixExpression(
                 token,
@@ -180,7 +180,7 @@ public class Parser {
         String operator = this.currToken.getLiteral();
         ParserPrecedence precedence = this.currPrecedence();
 
-        this.advanceParser();
+        this.advanceParser(); // move off infix operator
 
         return new InfixExpression(
                 token,
@@ -191,10 +191,11 @@ public class Parser {
     }
 
     private Expression parseGroupedExpression() {
-        this.advanceParser();
+        this.advanceParser(); // move off "(" token
 
         var exp = this.parseExpression(ParserPrecedence.LOWEST);
 
+        // expect closing ")" and move onto it
         if (!this.expectPeek(TokenType.RPAREN)) {
             return null;
         }
@@ -202,10 +203,11 @@ public class Parser {
         return exp;
     }
 
-    //If statements only allow a single expression per branch => produces a value
+    //If statements: only allow a single expression per branch => produces a value
     private IfExpression parseIfExpression() {
         IfExpression ifExpression = new IfExpression(this.currToken);
 
+        // check for begin of condition syntax: check for "(" and move onto first token inside (...)
         if (!this.expectPeek(TokenType.LPAREN)) {
             return null;
         }
@@ -259,7 +261,7 @@ public class Parser {
             return parameters;
         }
 
-        this.advanceParser();
+        this.advanceParser();// move onto first parameter declaration
 
         parameters.add(this.parseIdentifier());
 
@@ -290,7 +292,7 @@ public class Parser {
             return arguments;
         }
 
-        this.advanceParser();
+        this.advanceParser();//move onto first argument
 
         arguments.add(this.parseExpression(ParserPrecedence.LOWEST));
 
@@ -329,7 +331,7 @@ public class Parser {
 
         returnStatement.setReturnValue(this.parseExpression(ParserPrecedence.LOWEST));
 
-        if(!expectPeek(TokenType.SEMICOLON)){
+        if (!expectPeek(TokenType.SEMICOLON)) {
             return null;
         }
 
@@ -348,7 +350,6 @@ public class Parser {
         if (!this.expectPeek(TokenType.ASSIGN)) {
             return null;
         }
-
         this.advanceParser();
 
         statement.setValue(this.parseExpression(ParserPrecedence.LOWEST));
@@ -394,12 +395,15 @@ public class Parser {
     }
 
     /**
-     * The "left-binding power"
+     * The "left-binding power" of the next token
      */
     private ParserPrecedence peekPrecedence() {
         return this.precedenceMap.getOrDefault(this.nextToken.getTokenType(), ParserPrecedence.LOWEST);
     }
 
+    /**
+     * The "left-binding power" of the current token
+     */
     private ParserPrecedence currPrecedence() {
         return this.precedenceMap.getOrDefault(this.currToken.getTokenType(), ParserPrecedence.LOWEST);
     }

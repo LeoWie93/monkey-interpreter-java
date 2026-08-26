@@ -1,10 +1,10 @@
 package com.github.leowie93.repl;
 
 import com.github.leowie93.ast.Program;
+import com.github.leowie93.evaluation.Evaluator;
+import com.github.leowie93.evaluation.ValueObject;
 import com.github.leowie93.lexer.Lexer;
 import com.github.leowie93.parser.Parser;
-import com.github.leowie93.token.Token;
-import com.github.leowie93.token.TokenType;
 
 import java.util.Scanner;
 
@@ -30,7 +30,10 @@ public class Repl {
                 continue;
             }
 
-            System.out.println(program.nodeToString());
+            ValueObject evaluated = new Evaluator().eval(program);
+            if (evaluated != null) {
+                System.out.println(evaluated.inspect());
+            }
         }
     }
 }

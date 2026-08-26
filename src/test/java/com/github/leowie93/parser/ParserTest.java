@@ -430,7 +430,6 @@ public class ParserTest {
 }
 
 //TODO refactor/consolidate these "testcases". Maybe they could be simpler or more generic. InputOuputTestHelper or smth
-
 record LetStatementTest<T>(String expectedIdentifier, T expectedValue) {
 }
 
