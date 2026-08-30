@@ -9,7 +9,7 @@ public class IntegerObject implements ValueObject{
 
     @Override
     public ObjectType type() {
-        return ObjectType.INTEGER_OBJC;
+        return ObjectType.INTEGER;
     }
 
     @Override

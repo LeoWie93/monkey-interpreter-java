@@ -1,6 +1,7 @@
 package com.github.leowie93.repl;
 
 import com.github.leowie93.ast.Program;
+import com.github.leowie93.evaluation.Environment;
 import com.github.leowie93.evaluation.Evaluator;
 import com.github.leowie93.evaluation.ValueObject;
 import com.github.leowie93.lexer.Lexer;
@@ -12,6 +13,7 @@ public class Repl {
 
     public void start() {
         Scanner sc = new Scanner(System.in);
+        Environment env = new Environment();
 
         while (true) {
             String input = sc.nextLine();
@@ -30,7 +32,7 @@ public class Repl {
                 continue;
             }
 
-            ValueObject evaluated = new Evaluator().eval(program);
+            ValueObject evaluated = new Evaluator().eval(program, env);
             if (evaluated != null) {
                 System.out.println(evaluated.inspect());
             }

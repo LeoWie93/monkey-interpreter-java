@@ -10,7 +10,7 @@ public class ReturnValueObject implements ValueObject {
 
     @Override
     public ObjectType type() {
-        return ObjectType.RETURN_VALUE_OBJECT;
+        return ObjectType.RETURN_VALUE;
     }
 
     @Override

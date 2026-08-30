@@ -10,7 +10,7 @@ public class BooleanObject implements ValueObject {
 
     @Override
     public ObjectType type() {
-        return ObjectType.BOOLEAN_OBJECT;
+        return ObjectType.BOOLEAN;
     }
 
     @Override

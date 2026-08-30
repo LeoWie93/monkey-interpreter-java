@@ -3,7 +3,7 @@ package com.github.leowie93.evaluation;
 public class NullObject implements ValueObject {
     @Override
     public ObjectType type() {
-        return ObjectType.NULL_OBJECT;
+        return ObjectType.NULL;
     }
 
     @Override

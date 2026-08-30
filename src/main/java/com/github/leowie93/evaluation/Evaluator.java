@@ -4,10 +4,7 @@ package com.github.leowie93.evaluation;
 import com.github.leowie93.ast.Expression.*;
 import com.github.leowie93.ast.Node;
 import com.github.leowie93.ast.Program;
-import com.github.leowie93.ast.Statement.BlockStatement;
-import com.github.leowie93.ast.Statement.ExpressionStatement;
-import com.github.leowie93.ast.Statement.ReturnStatement;
-import com.github.leowie93.ast.Statement.Statement;
+import com.github.leowie93.ast.Statement.*;
 
 import java.util.List;
 import java.util.Objects;
@@ -18,41 +15,80 @@ public class Evaluator {
     BooleanObject trueCase = new BooleanObject(true);
     BooleanObject falseCase = new BooleanObject(false);
 
-    public ValueObject eval(Node node) {
+    public ValueObject eval(Node node, Environment env) {
         return switch (node) {
-            case Program p -> this.evalProgram(p.getStatements());
-            case BlockStatement bs -> this.evalBlockStatement(bs.statementList);
-            case ExpressionStatement es -> this.eval(es.expression);
-            case ReturnStatement rs -> new ReturnValueObject(this.eval(rs.returnValue));
+            case Program p -> this.evalProgram(p.getStatements(), env);
+            case BlockStatement bs -> this.evalBlockStatement(bs.statementList, env);
+            case LetStatement bs -> {
+                ValueObject result = this.eval(bs.getValue(), env);
+                if (this.isError(result)) {
+                    yield result;
+                }
+
+                env.set(bs.getIdentifier().getValue(), result);
+                yield null;
+            }
+            case IdentifierExpression ie -> this.evalIdentifier(ie, env);
+            case ExpressionStatement es -> this.eval(es.expression, env);
+            case ReturnStatement rs -> {
+                ValueObject result = this.eval(rs.returnValue, env);
+                if (this.isError(result)) {
+                    yield result;
+                }
+
+                yield new ReturnValueObject(result);
+            }
             case IntegerLiteralExpression ie -> new IntegerObject(ie.getValue());
             case BooleanLiteralExpression bi -> this.nativeBoolToBooleanObject(bi.getValue());
-            case IfExpression ie -> this.evalIfExpression(ie);
+            case IfExpression ie -> this.evalIfExpression(ie, env);
             case PrefixExpression pe -> {
-                ValueObject right = this.eval(pe.getRight());
+                ValueObject right = this.eval(pe.getRight(), env);
+                if (this.isError(right)) {
+                    yield right;
+                }
                 yield this.evalPrefixExpression(pe.getOperator(), right);
             }
             case InfixExpression ie -> {
-                ValueObject left = this.eval(ie.getLeft());
-                ValueObject right = this.eval(ie.getRight());
+                ValueObject left = this.eval(ie.getLeft(), env);
+                ValueObject right = this.eval(ie.getRight(), env);
+                if (this.isError(left)) {
+                    yield left;
+                }
+                if (this.isError(right)) {
+                    yield right;
+                }
                 yield this.evalInfixExpression(ie.getOperator(), left, right);
             }
             default -> null;
         };
     }
 
-    private ValueObject evalIfExpression(IfExpression ie) {
-        ValueObject condition = this.eval(ie.condition);
+    private ValueObject evalIdentifier(IdentifierExpression node, Environment env) {
+        var value = env.get(node.getValue());
+        if (value == null) {
+            return new ErrorObject("identifier not found: " + node.getValue());
+        }
+
+        return value;
+    }
+
+    private ValueObject evalIfExpression(IfExpression ie, Environment env) {
+        ValueObject condition = this.eval(ie.condition, env);
+        if (this.isError(condition)) {
+            return condition;
+        }
+
         if (this.isTruthy(condition)) {
-            return this.eval(ie.consequence);
+            return this.eval(ie.consequence, env);
         } else if (ie.alternative != null) {
-            return this.eval(ie.alternative);
+            return this.eval(ie.alternative, env);
         } else {
             return this.nullCase;
         }
     }
 
     /**
-     * Every Integer value is truthy -inf <-> +inf, including 0
+     * Every Integer value is truthy [-inf,+inf], including 0
      */
     private boolean isTruthy(ValueObject condition) {
         if (condition.equals(trueCase)) {
@@ -81,15 +117,21 @@ public class Evaluator {
         if (left instanceof IntegerObject && right instanceof IntegerObject) {
             return this.evalIntegerInfixExpression(operator, (IntegerObject) left, (IntegerObject) right);
         }
-        //TODO this means (null == null) => truthy?
+        //We can compare a boolean and an INT object without unpacking it, they are never the same
+
         if (Objects.equals(operator, "==")) {
             return this.nativeBoolToBooleanObject(left == right);
         }
+
         if (Objects.equals(operator, "!=")) {
             return this.nativeBoolToBooleanObject(left != right);
         }
 
-        return this.nullCase;
+        if (left.type() != right.type()) {
+            return createError("type mismatch: %s %s %s", left.type(), operator, right.type());
+        }
+
+        return createError("unknown operator: %s %s %s", left.type(), operator, right.type());
     }
 
     private ValueObject evalIntegerInfixExpression(String operator, IntegerObject left, IntegerObject right) {
@@ -104,21 +146,21 @@ public class Evaluator {
             case ">" -> this.nativeBoolToBooleanObject(left.value > right.value);
             case ">=" -> this.nativeBoolToBooleanObject(left.value >= right.value);
             case "<=" -> this.nativeBoolToBooleanObject(left.value <= right.value);
-            default -> this.nullCase;
+            default -> createError("unknown operator: %s %s %s", left.type(), operator, right.type());
         };
     }
 
     private ValueObject evalPrefixExpression(String operator, ValueObject right) {
         return switch (operator) {
             case "!" -> this.evalBangPrefixOperatorExpression(right);
-            case "-" -> this.evalMinusPerfixOperatorExpression(right);
-            default -> null;
+            case "-" -> this.evalMinusPrefixOperatorExpression(right);
+            default -> createError("unknown operator: %s%s", operator, right.type());
         };
     }
 
-    private ValueObject evalMinusPerfixOperatorExpression(ValueObject right) {
+    private ValueObject evalMinusPrefixOperatorExpression(ValueObject right) {
         if (!(right instanceof IntegerObject)) {
-            return this.nullCase;
+            return createError("unknown operator: -%s", right.type());
         }
         return new IntegerObject(-Integer.parseInt(right.inspect()));
     }
@@ -137,31 +179,53 @@ public class Evaluator {
         return this.falseCase;
     }
 
-    private ValueObject evalProgram(List<Statement> statements) {
+    private ValueObject evalProgram(List<Statement> statements, Environment env) {
         ValueObject object = new NullObject();
 
         for (Statement statement : statements) {
-            object = eval(statement);
+            object = eval(statement, env);
 
             if (object instanceof ReturnValueObject) {
                 return ((ReturnValueObject) object).value;
+            }
+            if (object instanceof ErrorObject) {
+                return object;
             }
         }
 
         return object;
     }
 
-    private ValueObject evalBlockStatement(List<Statement> statements) {
+    private ValueObject evalBlockStatement(List<Statement> statements, Environment env) {
         ValueObject result = new NullObject();
 
         for (Statement statement : statements) {
-            result = eval(statement);
+            result = eval(statement, env);
 
-            if (result instanceof ReturnValueObject) {
+            if (result instanceof ReturnValueObject || result instanceof ErrorObject) {
                 return result;
             }
         }
 
         return result;
+    }
+
+    private boolean isError(ValueObject valueObject) {
+        if (valueObject != null) {
+            return valueObject instanceof ErrorObject;
+        }
+        return false;
+    }
+
+    private ErrorObject createError(String format, Object a) {
+        return new ErrorObject(String.format(format, a));
+    }
+
+    private ErrorObject createError(String format, Object a, Object b) {
+        return new ErrorObject(String.format(format, a, b));
+    }
+
+    private ErrorObject createError(String format, Object a, Object b, Object c) {
+        return new ErrorObject(String.format(format, a, b, c));
     }
 }

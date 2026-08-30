@@ -142,6 +142,63 @@ public class EvalTest {
         }
     }
 
+    @Test
+    public void testLetStatements() {
+        List<InputOutputTest<Integer>> testList = List.of(
+                new InputOutputTest<>("let a = 5; a;", 5),
+                new InputOutputTest<>("let a = 5 * 5; a;", 25),
+                new InputOutputTest<>("let a = 5 * 5;let b = a; b;", 25),
+                new InputOutputTest<>("let a = 5;let b = a; let c = a + b + 5; c;", 15),
+                new InputOutputTest<>("let a = 5; let a = 10; let b = 5; a;", 10)
+        );
+
+        for (InputOutputTest<Integer> test : testList) {
+            var evaluated = this.testEval(test.input());
+            testIntegerObject(evaluated, test.expected());
+        }
+    }
+
+    @Test
+    public void testErrorHandling() {
+        List<InputOutputTest<String>> testList = List.of(
+                new InputOutputTest<>("5 + true;", "type mismatch: INTEGER + BOOLEAN"),
+                new InputOutputTest<>("5 + true; 5;", "type mismatch: INTEGER + BOOLEAN"),
+                new InputOutputTest<>("-true", "unknown operator: -BOOLEAN"),
+                new InputOutputTest<>("foobar", "identifier not found: foobar"),
+                new InputOutputTest<>("false - true;", "unknown operator: BOOLEAN - BOOLEAN"),
+                new InputOutputTest<>("5; false - true; 5;", "unknown operator: BOOLEAN - BOOLEAN"),
+                new InputOutputTest<>("if(10 > 1){ true + false;}", "unknown operator: BOOLEAN + BOOLEAN"),
+                new InputOutputTest<>("""
+                        if(10 > 1){ 
+                            if(10 > 1){
+                                return true + false;
+                            }
+                        
+                            return 1;
+                        }
+                        """, "unknown operator: BOOLEAN + BOOLEAN")
+        );
+
+        for (InputOutputTest<String> test : testList) {
+            var evaluated = this.testEval(test.input());
+            if (evaluated instanceof ErrorObject) {
+                if (!test.expected().equals(((ErrorObject) evaluated).message)) {
+                    Assertions.assertFalse(
+                            true,
+                            String.format(
+                                    "wrong error message. Expected {%s} but got {%s}",
+                                    test.expected(),
+                                    ((ErrorObject) evaluated).message)
+                    );
+                } else {
+                    continue;
+                }
+            } else {
+                Assertions.assertFalse(true, "No error received: " + evaluated.type());
+            }
+        }
+    }
+
     private void testNullObject(ValueObject object) {
         Assertions.assertInstanceOf(NullObject.class, object);
     }
@@ -160,7 +217,7 @@ public class EvalTest {
         Lexer lexer = new Lexer(input);
         Parser parser = new Parser(lexer);
         Program program = parser.parseProgram();
-        return new Evaluator().eval(program);
+        return new Evaluator().eval(program, new Environment());
     }
 }
 
