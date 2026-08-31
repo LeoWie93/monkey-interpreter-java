@@ -18,11 +18,9 @@ public class BlockStatement implements Statement {
     public String nodeToString() {
         StringBuilder output = new StringBuilder();
 
-        output.append("{");
         for (Statement statement : this.statementList) {
-            output.append(statement.toString());
+            output.append(statement.nodeToString());
         }
-        output.append("}");
 
         return output.toString();
     }

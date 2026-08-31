@@ -5,7 +5,9 @@ import com.github.leowie93.ast.Expression.*;
 import com.github.leowie93.ast.Node;
 import com.github.leowie93.ast.Program;
 import com.github.leowie93.ast.Statement.*;
+import com.sun.source.tree.BreakTree;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -59,8 +61,67 @@ public class Evaluator {
                 }
                 yield this.evalInfixExpression(ie.getOperator(), left, right);
             }
+            case FunctionLiteralExpression fl -> new FunctionObject(fl.parameters, fl.body, env);
+            case CallExpression ce -> {
+                var result = this.eval(ce.function, env);
+                if (this.isError(result)) {
+                    yield result;
+                }
+
+                FunctionObject fn = (FunctionObject) result;
+
+                List<ValueObject> args = this.evalExpression(ce.arguments, env);
+                if (args.size() == 1 && this.isError(args.get(0))) {
+                    yield args.get(0);
+                }
+
+                yield this.applyFunction(fn, args);
+            }
             default -> null;
         };
+    }
+
+    private ValueObject applyFunction(FunctionObject fn, List<ValueObject> args) {
+        Environment extendedEnv = this.extendFunctionEnv(fn, args);
+        var evaluated = this.eval(fn.body, extendedEnv);
+        return this.unwrapReturnValue(evaluated);
+    }
+
+    private ValueObject unwrapReturnValue(ValueObject evaluated) {
+        if (evaluated instanceof ReturnValueObject) {
+            return ((ReturnValueObject) evaluated).value;
+        }
+
+        return evaluated;
+    }
+
+    /**
+     * This currently ignores overspilling arguments and crashes on to few
+     */
+    private Environment extendFunctionEnv(FunctionObject fn, List<ValueObject> args) {
+        Environment extendedEnv = new Environment(fn.env);
+
+        for (int i = 0; i < fn.params.size(); i++) {
+            extendedEnv.set(fn.params.get(i).getValue(), args.get(i));
+        }
+
+        return extendedEnv;
+    }
+
+    //Notable: We are evaluating function arguments LTR!
+    private List<ValueObject> evalExpression(List<Expression> params, Environment env) {
+        List<ValueObject> result = new ArrayList<>();
+
+        for (Expression param : params) {
+            ValueObject evaluated = this.eval(param, env);
+            if (this.isError(evaluated)) {
+                return new ArrayList<>(List.of(evaluated));
+            }
+
+            result.add(evaluated);
+        }
+
+        return result;
     }
 
     private ValueObject evalIdentifier(IdentifierExpression node, Environment env) {

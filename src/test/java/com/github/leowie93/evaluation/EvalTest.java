@@ -154,8 +154,73 @@ public class EvalTest {
 
         for (InputOutputTest<Integer> test : testList) {
             var evaluated = this.testEval(test.input());
-            testIntegerObject(evaluated, test.expected());
+            this.testIntegerObject(evaluated, test.expected());
         }
+    }
+
+    @Test
+    public void testFunctionObject() {
+        String input = "fn(x) { x + 2 };";
+        var evaluated = this.testEval(input);
+
+        Assertions.assertInstanceOf(FunctionObject.class, evaluated);
+        FunctionObject fn = (FunctionObject) evaluated;
+
+        Assertions.assertEquals(1, fn.params.size());
+        Assertions.assertEquals("(x + 2)", fn.body.nodeToString());
+    }
+
+    @Test
+    public void testFunctionApplication() {
+        List<InputOutputTest<Integer>> testList = List.of(
+                new InputOutputTest<>("let identity = fn(x) { x; }; identity(5);", 5),
+                new InputOutputTest<>("let identity = fn(x) { return x; }; identity(5);", 5),
+                new InputOutputTest<>("let double = fn(x) { x * 2; }; double(5);", 10),
+                new InputOutputTest<>("let add = fn(x, y) { x + y; }; add(2, 3);", 5),
+                new InputOutputTest<>("let add = fn(x, y) { x + y; }; add(2, add(1, 2));", 5),
+                new InputOutputTest<>("fn(x, y) { x + y; }(5,5);", 10),
+                new InputOutputTest<>("""
+                        let devide = fn(x) {
+                            let d = 40;
+                            return d / x;
+                        };
+                        devide(2);
+                        """, 20)
+        );
+
+        for (InputOutputTest<Integer> test : testList) {
+            var evaluated = this.testEval(test.input());
+            this.testIntegerObject(evaluated, test.expected());
+        }
+    }
+
+    @Test
+    public void testClosures() {
+        String input = """
+                let newAdder = fn(x) {
+                    fn(y) { x + y };
+                };
+                
+                let addTwo = newAdder(2);
+                addTwo(3);
+                """;
+
+        var evaluated = this.testEval(input);
+        this.testIntegerObject(evaluated, 5);
+    }
+
+    @Test
+    public void testFunctionAsArguments() {
+        String input = """
+                let add = fn(a, b) { a + b };
+                let sub = fn(a, b) { a - b };
+                
+                let applyFunc = fn(a, b, func) { return func(a,b); };
+                applyFunc(10,2,sub);
+                """;
+
+        var evaluated = this.testEval(input);
+        this.testIntegerObject(evaluated, 8);
     }
 
     @Test
@@ -183,18 +248,15 @@ public class EvalTest {
             var evaluated = this.testEval(test.input());
             if (evaluated instanceof ErrorObject) {
                 if (!test.expected().equals(((ErrorObject) evaluated).message)) {
-                    Assertions.assertFalse(
-                            true,
-                            String.format(
-                                    "wrong error message. Expected {%s} but got {%s}",
-                                    test.expected(),
-                                    ((ErrorObject) evaluated).message)
-                    );
+                    Assertions.fail(String.format(
+                            "wrong error message. Expected {%s} but got {%s}",
+                            test.expected(),
+                            ((ErrorObject) evaluated).message));
                 } else {
                     continue;
                 }
             } else {
-                Assertions.assertFalse(true, "No error received: " + evaluated.type());
+                Assertions.fail("No error received: " + evaluated.type());
             }
         }
     }
